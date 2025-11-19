@@ -15,7 +15,7 @@ DATETIME_DISPLAY_FORMAT = "%Y-%m-%d %H:%M"
 # Authentication settings
 ENABLE_PASSWORD_PROTECTION = True
 # Change this password to something secure!
-APP_PASSWORD = "taidi2024"  # TODO: Change this password!
+APP_PASSWORD = "weijiangruinmylife"  # TODO: Change this password!
 
 # Future: Multi-user support (not yet implemented)
 ENABLE_MULTI_USER = False

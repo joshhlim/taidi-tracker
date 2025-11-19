@@ -1,3 +1,4 @@
 .DS_Store
 *.pyc
 /taidi
+taidi_game.db
