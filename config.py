@@ -5,7 +5,7 @@ DATABASE_PATH = "taidi_game.db"
 
 # App settings
 APP_TITLE = "🃏 Taidi Card Game Tracker"
-DEFAULT_CARD_VALUE = 0.10
+DEFAULT_CARD_VALUE = 0.20
 DEFAULT_PLAYERS = []
 
 # UI settings
