@@ -6,21 +6,82 @@ from datetime import datetime
 
 def compute_payouts(card_counts: dict, card_value: float):
     """
-    Given a dictionary of {player_name: #_cards_they_got},
-    compute how much each player owes or is owed.
-    Returns {player_name: payout_amount}.
+    Compute Taidi game payouts based on card differences.
+    
+    Rules:
+    - Each player pays players with fewer cards (difference × card_value)
+    - Multipliers based on number of players:
+      * 4 players: 2× at 10+ cards, 3× at 13+ cards
+      * 3 players: 2× at 12+ cards, 3× at 15+ cards
+    - Everyone pays the winner (0 cards) an extra 2 cards worth
+    
+    Args:
+        card_counts: {player_name: number_of_cards}
+        card_value: dollar value per card
+    
+    Returns:
+        {player_name: net_payout} (positive = won, negative = lost)
     """
-    total_cards = sum(card_counts.values())
     num_players = len(card_counts)
     
-    if num_players == 0 or total_cards == 0:
-        return {p: 0.0 for p in card_counts}
+    if num_players == 0:
+        return {}
     
-    avg = total_cards / num_players
-    payouts = {}
-    for player, count in card_counts.items():
-        diff = count - avg
-        payouts[player] = diff * card_value
+    # Initialize payouts (positive = earnings, negative = payments)
+    payouts = {player: 0.0 for player in card_counts}
+    
+    # Determine multiplier thresholds based on number of players
+    if num_players == 4:
+        double_threshold = 10
+        triple_threshold = 13
+    elif num_players == 3:
+        double_threshold = 12
+        triple_threshold = 15
+    else:
+        # For other player counts, use 4-player rules as default
+        double_threshold = 10
+        triple_threshold = 13
+    
+    # Step 1: Calculate pairwise payments based on card differences
+    players = list(card_counts.keys())
+    for i, payer in enumerate(players):
+        payer_cards = card_counts[payer]
+        
+        # Determine multiplier for this player
+        if payer_cards >= triple_threshold:
+            multiplier = 3
+        elif payer_cards >= double_threshold:
+            multiplier = 2
+        else:
+            multiplier = 1
+        
+        # Pay each player who has fewer cards
+        for j, receiver in enumerate(players):
+            if i == j:
+                continue
+            
+            receiver_cards = card_counts[receiver]
+            
+            # Only pay if receiver has fewer cards
+            if payer_cards > receiver_cards:
+                card_diff = payer_cards - receiver_cards
+                payment = card_diff * card_value * multiplier
+                
+                payouts[payer] -= payment
+                payouts[receiver] += payment
+    
+    # Step 2: Everyone pays the winner (0 cards) an extra 2 cards
+    winners = [player for player, cards in card_counts.items() if cards == 0]
+    
+    if winners:
+        # If there are multiple winners (multiple people with 0 cards), split the bonus
+        winner_bonus_per_payer = 2 * card_value
+        
+        for winner in winners:
+            for player in players:
+                if player != winner:
+                    payouts[player] -= winner_bonus_per_payer
+                    payouts[winner] += winner_bonus_per_payer
     
     return payouts
 
