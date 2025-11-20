@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 
 
-def compute_payouts(card_counts: dict, card_value: float):
+def compute_payouts(card_counts: dict, card_value: float, special_hands: dict = None, bao_player: str = None):
     """
     Compute Taidi game payouts based on card differences.
     
@@ -14,14 +14,20 @@ def compute_payouts(card_counts: dict, card_value: float):
       * 4 players: 2× at 10+ cards, 3× at 13+ cards
       * 3 players: 2× at 12+ cards, 3× at 15+ cards
     - Everyone pays the winner (0 cards) an extra 2 cards worth
+    - Special hands: Everyone pays each special hand holder 5 cards worth per special hand
+    - Bao: One player pays for all losses (excluding special hands)
     
     Args:
         card_counts: {player_name: number_of_cards}
         card_value: dollar value per card
+        special_hands: {player_name: number_of_special_hands} (optional)
+        bao_player: name of player who pays for everyone (optional)
     
     Returns:
         {player_name: net_payout} (positive = won, negative = lost)
     """
+    if special_hands is None:
+        special_hands = {}
     num_players = len(card_counts)
     
     if num_players == 0:
@@ -83,6 +89,42 @@ def compute_payouts(card_counts: dict, card_value: float):
                     payouts[player] -= winner_bonus_per_payer
                     payouts[winner] += winner_bonus_per_payer
     
+    # Step 3: Bao - one player pays for everyone's losses (before special hands)
+    if bao_player and bao_player in players:
+        # Calculate what would be paid normally (snapshot before bao)
+        payouts_before_bao = payouts.copy()
+        
+        # Find all players with losses (negative payouts)
+        total_losses = 0.0
+        for player in players:
+            if player != bao_player and payouts[player] < 0:
+                total_losses += abs(payouts[player])
+                # Zero out the losing player's loss
+                payouts[player] = 0.0
+        
+        # Bao player takes on all the losses
+        payouts[bao_player] = payouts_before_bao.get(bao_player, 0.0) - total_losses
+        
+        # Winners keep their winnings
+        for player in players:
+            if player != bao_player and payouts_before_bao[player] > 0:
+                payouts[player] = payouts_before_bao[player]
+    
+    # Step 4: Special hands - everyone pays holder 5 cards per special hand
+    # Special hands are NOT affected by bao
+    if special_hands:
+        special_hand_value = 5 * card_value
+        
+        for holder, num_special_hands in special_hands.items():
+            if num_special_hands > 0 and holder in players:
+                # Everyone else pays this holder
+                for player in players:
+                    if player != holder:
+                        payment_per_hand = special_hand_value
+                        total_payment = payment_per_hand * num_special_hands
+                        payouts[player] -= total_payment
+                        payouts[holder] += total_payment
+    
     return payouts
 
 
@@ -95,12 +137,17 @@ class CardGameTracker:
         self.history = pd.DataFrame(index=players)
         self.tx_log = []
     
-    def add_round(self, card_counts: dict, card_value: float):
+    def add_round(self, card_counts: dict, card_value: float, special_hands: dict = None, bao_player: str = None):
         """
         Add a round given card counts for each player.
         card_counts: {player_name: number_of_cards}
+        special_hands: {player_name: number_of_special_hands}
+        bao_player: player who pays for everyone (excluding special hands)
         """
-        payouts = compute_payouts(card_counts, card_value)
+        if special_hands is None:
+            special_hands = {}
+            
+        payouts = compute_payouts(card_counts, card_value, special_hands, bao_player)
         
         for player in self.players:
             self.balances[player] += payouts.get(player, 0.0)
@@ -113,6 +160,8 @@ class CardGameTracker:
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
             "card_counts": card_counts.copy(),
+            "special_hands": special_hands.copy(),
+            "bao_player": bao_player,
             "card_value": card_value,
             "payouts": payouts.copy()
         }

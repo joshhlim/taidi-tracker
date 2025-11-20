@@ -165,6 +165,8 @@ with tab1:
         # Round input section
         st.subheader(f"Round {st.session_state.round_num}")
         
+        # Card counts input
+        st.markdown("**Card Counts**")
         cols = st.columns(len(tracker.players))
         card_counts = {}
         
@@ -175,9 +177,45 @@ with tab1:
                     min_value=0,
                     value=0,
                     step=1,
-                    key=f"round_{st.session_state.round_num}_{player}"
+                    key=f"round_{st.session_state.round_num}_{player}_cards"
                 )
                 card_counts[player] = count
+        
+        # Special hands input
+        st.markdown("**Special Hands** *(optional - each special hand = 5 cards worth from everyone)*")
+        cols_special = st.columns(len(tracker.players))
+        special_hands = {}
+        
+        for idx, player in enumerate(tracker.players):
+            with cols_special[idx]:
+                special_count = st.number_input(
+                    f"{player}",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    key=f"round_{st.session_state.round_num}_{player}_special",
+                    label_visibility="collapsed"
+                )
+                if special_count > 0:
+                    special_hands[player] = special_count
+        
+        # Bao player selector
+        st.markdown("**Bao (包)** *(optional - select one player to pay for everyone's losses, excluding special hands)*")
+        col_bao1, col_bao2 = st.columns([1, 3])
+        with col_bao1:
+            bao_player = st.selectbox(
+                "Bao player",
+                options=["None"] + tracker.players,
+                key=f"round_{st.session_state.round_num}_bao",
+                label_visibility="collapsed"
+            )
+            if bao_player == "None":
+                bao_player = None
+        with col_bao2:
+            if bao_player:
+                st.caption(f"🎯 {bao_player} will pay for everyone's losses this round (special hands still apply normally)")
+            else:
+                st.caption("Select a player to 'bao' if someone wants to pay for everyone")
         
         col_a, col_b, col_c = st.columns([1, 1, 2])
         with col_a:
@@ -185,7 +223,7 @@ with tab1:
                 if sum(card_counts.values()) == 0:
                     st.warning("Enter card counts first!")
                 else:
-                    tracker.add_round(card_counts, st.session_state.card_value)
+                    tracker.add_round(card_counts, st.session_state.card_value, special_hands, bao_player)
                     st.session_state.round_num += 1
                     
                     # Save to database
