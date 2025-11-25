@@ -1,7 +1,28 @@
 """Configuration settings for Taidi card game tracker."""
 
-# Database settings
-DATABASE_PATH = "taidi_game.db"
+import os
+
+# Database settings - Turso (cloud) or SQLite (local)
+USE_TURSO = os.getenv("STREAMLIT_SHARING_MODE") is not None or os.getenv("USE_TURSO") == "true"
+
+if USE_TURSO:
+    # Use Turso (cloud database) - secrets will be loaded at runtime
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'turso' in st.secrets:
+            TURSO_DATABASE_URL = st.secrets["turso"]["database_url"]
+            TURSO_AUTH_TOKEN = st.secrets["turso"]["auth_token"]
+        else:
+            # Fallback for local testing
+            USE_TURSO = False
+            DATABASE_PATH = "taidi_game.db"
+    except:
+        # Fallback if secrets not configured
+        USE_TURSO = False
+        DATABASE_PATH = "taidi_game.db"
+else:
+    # Use local SQLite (for development)
+    DATABASE_PATH = "taidi_game.db"
 
 # App settings
 APP_TITLE = "🃏 Taidi Card Game Tracker"

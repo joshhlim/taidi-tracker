@@ -456,6 +456,76 @@ with tab4:
     reg_df = models.get_players_table_df()
     ui.format_players_table(reg_df)
     
+    # ----- Excel Export -----
+    st.markdown("---")
+    st.markdown("**📊 Export Data**")
+    
+    col_export1, col_export2 = st.columns([1, 2])
+    with col_export1:
+        if st.button("📥 Download Excel Report", type="primary", use_container_width=True):
+            try:
+                import pandas as pd
+                from io import BytesIO
+                from datetime import datetime
+                
+                # Create Excel file in memory
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    # Sheet 1: Player Statistics
+                    players_df = models.get_players_table_df()
+                    if not players_df.empty:
+                        players_df.to_excel(writer, sheet_name='Player Statistics', index=False)
+                    
+                    # Sheet 2: Archived Games
+                    archived_games = models.get_all_archived_games()
+                    if archived_games:
+                        games_data = []
+                        for game in archived_games:
+                            games_data.append({
+                                'Date': game['created_at'],
+                                'Players': ', '.join(game['players']),
+                                'Rounds': game['rounds_played'],
+                                'Card Value': game['card_value'],
+                                'Winner': game['winner_order'][0] if game['winner_order'] else 'N/A'
+                            })
+                        games_df = pd.DataFrame(games_data)
+                        games_df.to_excel(writer, sheet_name='Archived Games', index=False)
+                    
+                    # Sheet 3: Detailed Game Results
+                    if archived_games:
+                        detailed_data = []
+                        for game in archived_games:
+                            for player, total in game['final_totals'].items():
+                                detailed_data.append({
+                                    'Date': game['created_at'],
+                                    'Player': player,
+                                    'Final Total': total,
+                                    'Rounds': game['rounds_played'],
+                                    'Card Value': game['card_value']
+                                })
+                        detailed_df = pd.DataFrame(detailed_data)
+                        detailed_df.to_excel(writer, sheet_name='Detailed Results', index=False)
+                
+                # Get the Excel file
+                excel_data = output.getvalue()
+                
+                # Generate filename with timestamp
+                filename = f"taidi_tracker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                
+                st.download_button(
+                    label="💾 Save Excel File",
+                    data=excel_data,
+                    file_name=filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                
+            except Exception as e:
+                st.error(f"Error creating Excel file: {str(e)}")
+    
+    with col_export2:
+        st.caption("Download all your data as an Excel file with multiple sheets: Player Statistics, Archived Games, and Detailed Results.")
+    
     # ----- Danger Zone -----
     st.markdown("---")
     with st.expander("🧨 Danger Zone", expanded=False):
