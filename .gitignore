@@ -2,3 +2,4 @@
 *.pyc
 /taidi
 taidi_game.db
+*.db

@@ -23,6 +23,18 @@ if ENABLE_PASSWORD_PROTECTION and not auth.check_authentication():
 # ============== Main App (only runs if authenticated) ==============
 st.title(APP_TITLE)
 
+# ============== DEBUG: Show database status ==============
+from config import USE_TURSO
+if USE_TURSO:
+    st.sidebar.success("✅ Using TURSO Cloud Database")
+    try:
+        from config import TURSO_DATABASE_URL
+        st.sidebar.caption(f"DB: {TURSO_DATABASE_URL[:30]}...")
+    except:
+        st.sidebar.error("❌ Turso credentials not found!")
+else:
+    st.sidebar.warning("⚠️ Using Local SQLite (data will be lost!)")
+
 # ============== Query Params Helpers ==============
 def get_query_params():
     """Get query parameters (compatible with different Streamlit versions)."""
