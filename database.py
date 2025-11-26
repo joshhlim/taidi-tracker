@@ -1,65 +1,49 @@
-"""Database operations for Taidi card game tracker with Turso support."""
+"""Database operations for Taidi card game tracker with Turso support via Streamlit connection."""
 
 import json
 from datetime import datetime
 from typing import Dict, List, Optional
 from contextlib import contextmanager
+import streamlit as st
 
 from config import USE_TURSO, DATETIME_FORMAT
 
 if USE_TURSO:
-    # Turso (cloud database) - using sync wrapper
-    import asyncio
-    from libsql_client import create_client
-    from config import TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
-    
-    # Create a global client that's reused
-    _turso_client = None
-    
-    def get_turso_client():
-        """Get or create Turso client."""
-        global _turso_client
-        if _turso_client is None:
-            # Create event loop if needed
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            _turso_client = create_client(
-                url=TURSO_DATABASE_URL,
-                auth_token=TURSO_AUTH_TOKEN
-            )
-        return _turso_client
+    # Turso via Streamlit connection (handles async properly)
+    @st.cache_resource
+    def get_turso_connection():
+        """Get cached Turso connection using Streamlit."""
+        return st.connection("turso", type="sql")
     
     @contextmanager
     def get_db_connection():
-        """Context manager for Turso database connections."""
-        client = get_turso_client()
+        """Context manager for Turso database connections via Streamlit."""
+        conn = get_turso_connection()
         try:
-            yield client
+            yield conn
         except Exception as e:
             raise e
     
-    # Turso query execution helpers
-    def execute_query(client, query, params=None):
-        """Execute a query on Turso."""
+    def execute_query(conn, query, params=None):
+        """Execute a query on Turso via Streamlit connection."""
         if params:
-            result = client.execute(query, params)
+            conn.query(query, params=params, ttl=0)
         else:
-            result = client.execute(query)
-        return result
+            conn.query(query, ttl=0)
+        return None
     
-    def fetchall(client, query, params=None):
+    def fetchall(conn, query, params=None):
         """Fetch all rows from Turso."""
-        result = execute_query(client, query, params)
-        return result.rows
+        if params:
+            df = conn.query(query, params=params, ttl=0)
+        else:
+            df = conn.query(query, ttl=0)
+        return [row._asdict() for row in df.itertuples(index=False)]
     
-    def fetchone(client, query, params=None):
+    def fetchone(conn, query, params=None):
         """Fetch one row from Turso."""
-        result = execute_query(client, query, params)
-        return result.rows[0] if result.rows else None
+        rows = fetchall(conn, query, params)
+        return rows[0] if rows else None
 
 else:
     # SQLite (local database)
@@ -215,32 +199,18 @@ def get_player_by_name(name: str) -> Optional[Dict]:
             (name,)
         )
         if row:
-            if USE_TURSO:
-                return {
-                    "player_id": row['player_id'],
-                    "name": row['name'],
-                    "created_at": row['created_at'],
-                    "games_played": row['games_played'],
-                    "total_net": row['total_net'],
-                    "avg_per_game": row['avg_per_game'],
-                    "wins": row['wins'],
-                    "losses": row['losses'],
-                    "ties": row['ties'],
-                    "last_played": row['last_played'],
-                }
-            else:
-                return {
-                    "player_id": row["player_id"],
-                    "name": row["name"],
-                    "created_at": row["created_at"],
-                    "games_played": row["games_played"],
-                    "total_net": row["total_net"],
-                    "avg_per_game": row["avg_per_game"],
-                    "wins": row["wins"],
-                    "losses": row["losses"],
-                    "ties": row["ties"],
-                    "last_played": row["last_played"],
-                }
+            return {
+                "player_id": row['player_id'] if USE_TURSO else row["player_id"],
+                "name": row['name'] if USE_TURSO else row["name"],
+                "created_at": row['created_at'] if USE_TURSO else row["created_at"],
+                "games_played": row['games_played'] if USE_TURSO else row["games_played"],
+                "total_net": row['total_net'] if USE_TURSO else row["total_net"],
+                "avg_per_game": row['avg_per_game'] if USE_TURSO else row["avg_per_game"],
+                "wins": row['wins'] if USE_TURSO else row["wins"],
+                "losses": row['losses'] if USE_TURSO else row["losses"],
+                "ties": row['ties'] if USE_TURSO else row["ties"],
+                "last_played": row['last_played'] if USE_TURSO else row["last_played"],
+            }
         return None
 
 
@@ -248,8 +218,8 @@ def delete_player(player_id: str) -> bool:
     """Delete a player from the database."""
     try:
         with get_db_connection() as conn:
-            cursor = execute_query(conn, "DELETE FROM players WHERE player_id = ?", (player_id,))
-            return (cursor.rowcount if not USE_TURSO else cursor.rows_affected) > 0
+            execute_query(conn, "DELETE FROM players WHERE player_id = ?", (player_id,))
+            return True
     except Exception:
         return False
 
@@ -331,7 +301,7 @@ def get_all_archived_games() -> List[Dict]:
                 "final_totals": json.loads(row['final_totals'] if USE_TURSO else row["final_totals"]),
                 "winner_order": json.loads(row['winner_order'] if USE_TURSO else row["winner_order"]),
             }
-            # Handle round_history which might not exist in older entries
+            # Handle round_history
             round_hist = row['round_history'] if USE_TURSO else row["round_history"]
             if round_hist:
                 game_dict["round_history"] = json.loads(round_hist)
@@ -345,8 +315,8 @@ def delete_archived_game(archive_id: str) -> bool:
     """Delete a specific archived game from the database."""
     try:
         with get_db_connection() as conn:
-            cursor = execute_query(conn, "DELETE FROM archived_games WHERE archive_id = ?", (archive_id,))
-            return (cursor.rowcount if not USE_TURSO else cursor.rows_affected) > 0
+            execute_query(conn, "DELETE FROM archived_games WHERE archive_id = ?", (archive_id,))
+            return True
     except Exception:
         return False
 
@@ -403,8 +373,6 @@ def full_database_reset():
         execute_query(conn, "DELETE FROM active_games")
 
 
-# Initialize database (deferred to avoid async issues at import time)
+# Initialize database
 if not USE_TURSO:
-    # SQLite can initialize immediately
     init_database()
-# Turso initialization will happen on first connection
