@@ -9,13 +9,13 @@ from config import USE_TURSO, DATETIME_FORMAT
 
 if USE_TURSO:
     # Turso (cloud database)
-    from libsql_client import create_client
+    from libsql_client import create_client_sync
     from config import TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
     
     @contextmanager
     def get_db_connection():
         """Context manager for Turso database connections."""
-        client = create_client(
+        client = create_client_sync(
             url=TURSO_DATABASE_URL,
             auth_token=TURSO_AUTH_TOKEN
         )
@@ -387,5 +387,9 @@ def full_database_reset():
         execute_query(conn, "DELETE FROM active_games")
 
 
-# Initialize database on module import
-init_database()
+# Initialize database on module import (only if not using Turso with async issues)
+try:
+    init_database()
+except Exception as e:
+    # If initialization fails at import time (async issues), it will be called later
+    print(f"Database initialization deferred: {e}")
