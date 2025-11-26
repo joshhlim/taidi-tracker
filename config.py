@@ -2,27 +2,27 @@
 
 import os
 
-# Database settings - Turso (cloud) or SQLite (local)
-USE_TURSO = os.getenv("STREAMLIT_SHARING_MODE") is not None or os.getenv("USE_TURSO") == "true"
+# Database settings - Try to use Turso if secrets are available
+USE_TURSO = False
+TURSO_DATABASE_URL = None
+TURSO_AUTH_TOKEN = None
 
-if USE_TURSO:
-    # Use Turso (cloud database) - secrets will be loaded at runtime
-    try:
-        import streamlit as st
-        if hasattr(st, 'secrets') and 'turso' in st.secrets:
-            TURSO_DATABASE_URL = st.secrets["turso"]["database_url"]
-            TURSO_AUTH_TOKEN = st.secrets["turso"]["auth_token"]
-        else:
-            # Fallback for local testing
-            USE_TURSO = False
-            DATABASE_PATH = "taidi_game.db"
-    except:
-        # Fallback if secrets not configured
-        USE_TURSO = False
-        DATABASE_PATH = "taidi_game.db"
-else:
-    # Use local SQLite (for development)
+# Try to load Turso secrets (works in Streamlit Cloud)
+try:
+    import streamlit as st
+    if hasattr(st, 'secrets') and 'turso' in st.secrets:
+        TURSO_DATABASE_URL = st.secrets["turso"]["database_url"]
+        TURSO_AUTH_TOKEN = st.secrets["turso"]["auth_token"]
+        USE_TURSO = True
+        print("✅ Turso credentials loaded from secrets")
+except Exception as e:
+    print(f"⚠️ Turso secrets not found: {e}")
+    pass
+
+# Fallback to local SQLite for development
+if not USE_TURSO:
     DATABASE_PATH = "taidi_game.db"
+    print("⚠️ Using local SQLite database")
 
 # App settings
 APP_TITLE = "🃏 Taidi Card Game Tracker"
