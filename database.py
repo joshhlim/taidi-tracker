@@ -8,23 +8,39 @@ from contextlib import contextmanager
 from config import USE_TURSO, DATETIME_FORMAT
 
 if USE_TURSO:
-    # Turso (cloud database)
-    from libsql_client import create_client_sync
+    # Turso (cloud database) - using sync wrapper
+    import asyncio
+    from libsql_client import create_client
     from config import TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
+    
+    # Create a global client that's reused
+    _turso_client = None
+    
+    def get_turso_client():
+        """Get or create Turso client."""
+        global _turso_client
+        if _turso_client is None:
+            # Create event loop if needed
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            _turso_client = create_client(
+                url=TURSO_DATABASE_URL,
+                auth_token=TURSO_AUTH_TOKEN
+            )
+        return _turso_client
     
     @contextmanager
     def get_db_connection():
         """Context manager for Turso database connections."""
-        client = create_client_sync(
-            url=TURSO_DATABASE_URL,
-            auth_token=TURSO_AUTH_TOKEN
-        )
+        client = get_turso_client()
         try:
             yield client
         except Exception as e:
             raise e
-        finally:
-            client.close()
     
     # Turso query execution helpers
     def execute_query(client, query, params=None):
@@ -387,9 +403,8 @@ def full_database_reset():
         execute_query(conn, "DELETE FROM active_games")
 
 
-# Initialize database on module import (only if not using Turso with async issues)
-try:
+# Initialize database (deferred to avoid async issues at import time)
+if not USE_TURSO:
+    # SQLite can initialize immediately
     init_database()
-except Exception as e:
-    # If initialization fails at import time (async issues), it will be called later
-    print(f"Database initialization deferred: {e}")
+# Turso initialization will happen on first connection
